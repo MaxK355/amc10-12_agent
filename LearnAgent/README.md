@@ -3,12 +3,14 @@
 A personal AMC 10 tutor built on the GitHub Copilot SDK. It uses the SDK's agent loop with custom tools; scoring and learner data are handled deterministically in SQLite. See `design.html` for the design.
 
 ## Run
-```powershell
+```bash
 npm install          # once
 npm run ingest       # once: downloads the MATH dataset and builds data/learn.db
 npm start            # http://localhost:3000
 ```
-You must be logged in to GitHub Copilot (the SDK uses your Copilot CLI login). Optional: `$env:TUTOR_MODEL="..."` to pick a model.
+The tutor needs a model backend. Either:
+- be logged in to GitHub Copilot (the SDK uses your Copilot CLI login), or
+- use your own OpenAI-compatible API key: copy `.env.example` to `.env` and set `DASHSCOPE_API_KEY` (Alibaba DashScope/Qwen) or `TUTOR_BASE_URL` + `TUTOR_API_KEY` for any other endpoint. Optional `TUTOR_MODEL` picks the model (`qwen-max` by default with DashScope).
 
 ## Flow
 Dashboard → **Take test** (quick 10 / full 25) → **Review with tutor**, which diagnoses your mistakes and saves a 4-week plan → open a plan item to start a **lesson chat**, where you can ask questions and get homework; **review** items open a tutor chat that has you re-solve past mistakes from your error log, then gives fresh problems. Reopening a lesson or review continues the same chat. → **Homework** → review → retest.

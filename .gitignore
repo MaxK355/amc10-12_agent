@@ -1,0 +1,7 @@
+# Secrets — never commit
+LearnAgent/.env
+
+# Local runtime state
+LearnAgent/node_modules/
+LearnAgent/data/*.bak*
+.DS_Store

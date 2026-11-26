@@ -1,5 +1,8 @@
 // Copilot SDK integration: one session per learning activity, with mode-specific tools.
 import { CopilotClient, defineTool } from "@github/copilot-sdk";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SUBJECTS } from "./db.mjs";
 import {
   getAssessment, subjectBreakdown, skillEstimates, recordDiagnosis, savePlan, getActivePlan,
@@ -17,6 +20,38 @@ Integrity rules:
 - Problems solved with heavy hints are "assisted", not mastered; say so honestly.`;
 
 const json = (o) => JSON.stringify(o);
+
+// --- Model provider -------------------------------------------------------
+// By default the SDK authenticates as the logged-in GitHub Copilot user.
+// Alternatively, route model calls through any OpenAI-compatible provider
+// (BYOK). DashScope (Alibaba Qwen) is supported out of the box via
+// DASHSCOPE_API_KEY; any other endpoint works via TUTOR_BASE_URL + TUTOR_API_KEY.
+// Values may live in a .env file in the project root (KEY=VALUE lines).
+function loadDotEnv() {
+  try {
+    const text = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ".env"), "utf8");
+    for (const line of text.split("\n")) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  } catch { /* no .env file */ }
+}
+loadDotEnv();
+
+export function providerConfig() {
+  if (process.env.TUTOR_BASE_URL) {
+    const p = { type: process.env.TUTOR_PROVIDER_TYPE ?? "openai", baseUrl: process.env.TUTOR_BASE_URL };
+    if (process.env.TUTOR_BEARER_TOKEN) p.bearerToken = process.env.TUTOR_BEARER_TOKEN;
+    else if (process.env.TUTOR_API_KEY) p.apiKey = process.env.TUTOR_API_KEY;
+    return p;
+  }
+  if (process.env.DASHSCOPE_API_KEY) {
+    return { type: "openai", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", apiKey: process.env.DASHSCOPE_API_KEY };
+  }
+  return null; // use the logged-in Copilot user
+}
+
+export const DEFAULT_MODEL = process.env.DASHSCOPE_API_KEY && !process.env.TUTOR_BASE_URL ? "qwen-max" : null;
 const obj = (properties, required = []) => ({ type: "object", properties, required });
 const subjectEnum = { type: "string", enum: SUBJECTS };
 
@@ -270,8 +305,12 @@ export class Tutor {
   async #session(chat) {
     if (this.sessions.has(chat.id)) return this.sessions.get(chat.id);
     const spec = MODES[chat.mode](this.db, chat.ref_id);
+    const provider = providerConfig();
+    const model = process.env.TUTOR_MODEL ?? DEFAULT_MODEL;
     const config = {
-      ...(process.env.TUTOR_MODEL ? { model: process.env.TUTOR_MODEL } : {}),
+      // A custom provider (BYOK) requires an explicit model.
+      ...(model ? { model } : {}),
+      ...(provider ? { provider } : {}),
       streaming: true,
       tools: spec.tools,
       availableTools: ["custom:*"],

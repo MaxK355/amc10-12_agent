@@ -8,7 +8,7 @@
     "ingest": "node ingest/import-math.mjs",
     "start": "node server/index.mjs",
     "reset": "node scripts/reset-progress.mjs",
-    "test": "node --test test/"
+    "test": "node --test \"test/*.test.mjs\""
   },
   "keywords": [],
   "author": "",
