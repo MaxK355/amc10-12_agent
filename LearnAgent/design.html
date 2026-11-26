@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMC 10 Learning Agent – High-Level Design</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --card: #fff; --text: #1f2328; --muted: #57606a;
+    --accent: #0969da; --accent-bg: #ddf4ff; --border: #d0d7de;
+    --warn-bg: #fff8c5; --warn: #9a6700; --ok-bg: #dafbe1; --ok: #1a7f37;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         background: var(--bg); color: var(--text); line-height: 1.55; }
+  header { background: #24292f; color: #fff; padding: 28px 40px; }
+  header h1 { margin: 0 0 6px; font-size: 28px; }
+  header p { margin: 0; color: #c9d1d9; }
+  nav { background: var(--card); border-bottom: 1px solid var(--border); padding: 10px 40px;
+        position: sticky; top: 0; z-index: 10; }
+  nav a { color: var(--accent); text-decoration: none; margin-right: 18px; font-size: 14px; white-space: nowrap; }
+  nav a:hover { text-decoration: underline; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 40px 60px; }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 20px 28px; margin-bottom: 22px; }
+  h2 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 8px; font-size: 21px; }
+  h3 { font-size: 16px; margin: 20px 0 8px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #f6f8fa; }
+  pre { background: #f6f8fa; border: 1px solid var(--border); border-radius: 6px; padding: 14px;
+        overflow-x: auto; font-size: 13px; line-height: 1.45; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
+  .callout { border-left: 4px solid var(--accent); background: var(--accent-bg); padding: 10px 14px;
+             border-radius: 4px; margin: 12px 0; }
+  .warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .ok { border-left-color: var(--ok); background: var(--ok-bg); }
+  .cycle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+  .cycle span.step { background: var(--accent-bg); border: 1px solid var(--accent); color: #0550ae;
+                     padding: 6px 12px; border-radius: 16px; font-size: 14px; font-weight: 600; }
+  .cycle span.arrow { color: var(--muted); font-weight: bold; }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px;
+         background: #eaeef2; color: var(--muted); margin-left: 6px; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 3px 0; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AMC 10 Learning Agent – High-Level Design</h1>
+  <p>Personal AMC 10 coach built on the GitHub Copilot SDK &middot; single user &middot; local-first &middot; Version 1 (public data)</p>
+</header>
+
+<nav>
+  <a href="#goals">Goals</a>
+  <a href="#cycle">Learning Cycle</a>
+  <a href="#arch">Architecture</a>
+  <a href="#modes">Learning Modes</a>
+  <a href="#tools">Tools &amp; MCP</a>
+  <a href="#data">Data Strategy</a>
+  <a href="#test">Simulated Test</a>
+  <a href="#db">Data Model</a>
+  <a href="#rules">Guardrails</a>
+  <a href="#poc">POC Plan</a>
+  <a href="#future">Future</a>
+</nav>
+
+<main>
+
+<section id="goals">
+  <h2>1. Goals &amp; Requirements</h2>
+  <ul>
+    <li><b>Assess:</b> take a timed, AMC 10-style test; the agent scores it and diagnoses strengths and gaps.</li>
+    <li><b>Plan:</b> generate a personalized <b>one-month study plan</b> from the diagnosis.</li>
+    <li><b>Teach:</b> each study session has a concept explanation, <b>worked example problems</b>, and open Q&amp;A.</li>
+    <li><b>Practice:</b> the agent assigns <b>topic-specific homework</b>, reviews answers and reasoning, and logs errors.</li>
+    <li><b>Reassess &amp; adapt:</b> retest monthly, compare with earlier results, and adjust the plan; repeat continuously.</li>
+    <li><b>Reuse the platform:</b> use the Copilot SDK agent loop, tool framework, and MCP; do not build a custom agent loop.</li>
+  </ul>
+  <div class="callout ok"><b>Scope:</b> one learner (me), running locally on one machine. No multi-user accounts or hosting.</div>
+</section>
+
+<section id="cycle">
+  <h2>2. The Learning Cycle</h2>
+  <div class="cycle">
+    <span class="step">Simulated test</span><span class="arrow">&rarr;</span>
+    <span class="step">Score + diagnosis</span><span class="arrow">&rarr;</span>
+    <span class="step">1-month plan</span><span class="arrow">&rarr;</span>
+    <span class="step">Lessons + Q&amp;A</span><span class="arrow">&rarr;</span>
+    <span class="step">Homework + feedback</span><span class="arrow">&rarr;</span>
+    <span class="step">Weekly check-in</span><span class="arrow">&rarr;</span>
+    <span class="step">Retest</span><span class="arrow">&#8635;</span>
+  </div>
+  <h3>Diagnosis: find causes, not just wrong answers</h3>
+  <table>
+    <tr><th>Evidence</th><th>Diagnosis</th><th>Remedy</th></tr>
+    <tr><td>Cannot identify the relevant idea</td><td>Concept gap</td><td>Lesson + worked examples</td></tr>
+    <tr><td>Knows the idea, cannot find an approach</td><td>Strategy gap</td><td>Guided practice with hints</td></tr>
+    <tr><td>Correct setup, arithmetic slip</td><td>Execution error</td><td>Error log + careful-work drills</td></tr>
+    <tr><td>Solves it, but too slowly</td><td>Fluency / timing</td><td>Timed sets</td></tr>
+    <tr><td>Correct answer, weak reasoning</td><td>Uncertain mastery</td><td>Follow-up questions</td></tr>
+  </table>
+  <h3>Monthly plan structure</h3>
+  <ul>
+    <li><b>Week 1:</b> repair the highest-impact prerequisite gaps.</li>
+    <li><b>Week 2:</b> problem-solving strategies on target topics.</li>
+    <li><b>Week 3:</b> mixed topics and timed practice.</li>
+    <li><b>Week 4:</b> consolidate, review the error log, then retest.</li>
+  </ul>
+  <p>A 15-minute weekly check-in quiz can adjust the plan between monthly tests.</p>
+</section>
+
+<section id="arch">
+  <h2>3. Architecture</h2>
+<pre>
++--------------------------------------------------------------------------+
+|  React + TypeScript + KaTeX (web UI)                                     |
+|  Dashboard | Test player | Lesson + chat | Homework | Error log | Report |
++------------------------------------+-------------------------------------+
+                                     |  HTTP + SSE streaming
++------------------------------------v-------------------------------------+
+|  Node.js / TypeScript backend   (single local process)                   |
+|                                                                          |
+|  Activity controller --- creates one Copilot SDK session per activity    |
+|        |                 (test review / lesson / homework / planning)    |
+|        v                                                                 |
+|  +--------------------------------------------------------------------+  |
+|  |  GitHub Copilot SDK  (@github/copilot-sdk)                         |  |
+|  |  Built-in agent loop: model -> tool call -> result -> next step    |  |
+|  |  Built-in shell/file tools disabled; only learning tools enabled   |  |
+|  +-------+-----------------------+-------------------------+----------+  |
+|          |                       |                         |             |
+|   Native SDK tools        MCP: content server        MCP: math checker   |
+|   (learner profile,       (problem / lesson          (Python + SymPy:    |
+|    attempts, plan,         search, read-only)         compute, verify,   |
+|    homework)                                          answer equality)   |
+|          |                       |                                       |
+|  +-------v-----------------------v-----------------------------------+   |
+|  |  Learning services (plain TypeScript, deterministic)              |   |
+|  |  test builder | scoring | diagnosis | scheduler | spaced review   |   |
+|  +-------------------------------+-----------------------------------+   |
++----------------------------------+---------------------------------------+
+                                   |
+             +---------------------v----------------------+
+             |  SQLite: data\learn.db                     |
+             |  + local files: data\raw, diagrams, books  |
+             +--------------------------------------------+
+
+Offline (separate scripts):  download -> normalize -> verify -> tag -> import into SQLite
+</pre>
+  <table>
+    <tr><th>Layer</th><th>Responsibility</th></tr>
+    <tr><td>Web UI</td><td>Problem display (KaTeX), timed tests, lessons with chat, homework, progress and reports</td></tr>
+    <tr><td>Backend</td><td>Activity state, SDK sessions, streaming, and which tools each mode may use</td></tr>
+    <tr><td>Copilot SDK</td><td>Conversation, reasoning, tool orchestration, and MCP connections (existing runtime)</td></tr>
+    <tr><td>Learning services</td><td>Authoritative logic: test assembly, scoring, skill estimates, scheduling</td></tr>
+    <tr><td>SQLite</td><td>Source of truth for problems, attempts, skills, plans, and the error log</td></tr>
+  </table>
+  <div class="callout"><b>Key boundary:</b> Copilot controls the <i>conversation</i>; application code controls <i>assessment rules and learning records</i>. Conversation history is not the learner database.</div>
+</section>
+
+<section id="modes">
+  <h2>4. Learning Modes</h2>
+  <p>Each activity runs in its <b>own SDK session</b>, with a mode-specific system prompt, tool set, and a compact learner summary. Mode rules are enforced by which tools are available, not only by prompts.</p>
+  <table>
+    <tr><th>Mode</th><th>Agent behavior</th><th>Answer keys / solutions</th></tr>
+    <tr><td><b>Assessment</b></td><td>Clarify instructions only; the UI handles answering. No chat about the math.</td><td>Hidden</td></tr>
+    <tr><td><b>Test review</b></td><td>Explain mistakes, ask follow-up questions, diagnose causes</td><td>Available after submission</td></tr>
+    <tr><td><b>Lesson</b></td><td>Explain concepts, walk through worked examples, answer questions</td><td>Available for examples</td></tr>
+    <tr><td><b>Guided practice</b></td><td>Progressive hints (nudge &rarr; approach &rarr; key step)</td><td>Revealed after an attempt</td></tr>
+    <tr><td><b>Homework</b></td><td>Limited help; hints are recorded as "assisted"</td><td>After submission</td></tr>
+    <tr><td><b>Planning</b></td><td>Summarize evidence, propose a monthly or weekly plan</td><td>Not needed</td></tr>
+  </table>
+</section>
+
+<section id="tools">
+  <h2>5. Tools &amp; MCP</h2>
+  <h3>Native SDK tools (learner-specific, defined with <code>defineTool</code>)</h3>
+  <table>
+    <tr><th>Tool</th><th>Purpose</th><th>Modes</th></tr>
+    <tr><td><code>get_learner_summary</code></td><td>Skill estimates, recent results, active plan</td><td>All except Assessment</td></tr>
+    <tr><td><code>get_current_activity</code></td><td>Current lesson / homework / test context</td><td>All</td></tr>
+    <tr><td><code>get_attempt_details</code></td><td>Your answers, timing, hints used</td><td>Review, Homework</td></tr>
+    <tr><td><code>get_error_log</code></td><td>Past mistakes for review and spaced repetition</td><td>Lesson, Planning</td></tr>
+    <tr><td><code>assign_homework</code></td><td>Propose a homework set (backend validates and saves it)</td><td>Lesson</td></tr>
+    <tr><td><code>propose_study_plan</code></td><td>Structured monthly or weekly plan (backend validates and schedules it)</td><td>Planning</td></tr>
+    <tr><td><code>record_diagnosis</code></td><td>Save the diagnosed cause for a missed problem</td><td>Review</td></tr>
+  </table>
+  <h3>MCP servers (reusable; also usable from Copilot CLI / VS Code)</h3>
+  <table>
+    <tr><th>Server</th><th>Tools</th></tr>
+    <tr><td><b>content</b> (Node, stdio, read-only)</td><td><code>search_problems(topic, level, unseen)</code>, <code>get_problem(id)</code>, <code>get_worked_example(skill)</code>, <code>get_topic_map()</code></td></tr>
+    <tr><td><b>math</b> (Python + SymPy, stdio)</td><td><code>evaluate(expr)</code>, <code>check_equal(a, b)</code>, <code>solve(equation)</code>, <code>verify_solution(problem_id, answer)</code></td></tr>
+  </table>
+  <div class="callout warn"><b>Scoring is never done by the model.</b> The UI submits answers straight to the backend; code compares them with the stored answer (with SymPy for answer equality). The model only explains results and gives feedback on reasoning.</div>
+</section>
+
+<section id="data">
+  <h2>6. Data Strategy &ndash; Start with Public Data</h2>
+  <div class="callout ok"><b>Current state:</b> no private data. Version 1 uses the public <b>MATH dataset</b> (Hendrycks et al., NeurIPS 2021) for both tests and homework.</div>
+  <h3>MATH dataset</h3>
+  <ul>
+    <li><b>Source:</b> <a href="https://huggingface.co/datasets/qwedsacf/competition_math">huggingface.co/datasets/qwedsacf/competition_math</a> &middot; code: <a href="https://github.com/hendrycks/math">github.com/hendrycks/math</a> (MIT license)</li>
+    <li><b>Size:</b> 12,500 problems with full step-by-step solutions (7,500 train / 5,000 test), about 20 MB</li>
+    <li><b>Fields:</b> <code>problem</code>, <code>solution</code> (LaTeX; final answer in <code>\boxed{}</code>), <code>level</code> (1&ndash;5), <code>type</code> (7 subjects)</li>
+    <li><b>Origin:</b> AMC 10, AMC 12, AIME and similar contests. <b>Personal study use only; do not redistribute.</b></li>
+    <li><b>Cost:</b> $0</li>
+  </ul>
+  <h3>Subject &rarr; AMC 10 mapping</h3>
+  <table>
+    <tr><th>MATH subject</th><th>Use</th><th>AoPS book (future link)</th></tr>
+    <tr><td>Prealgebra</td><td>Core (warm-up / foundations)</td><td>Prealgebra</td></tr>
+    <tr><td>Algebra</td><td>Core</td><td>Introduction to Algebra</td></tr>
+    <tr><td>Counting &amp; Probability</td><td>Core</td><td>Intro to Counting &amp; Probability</td></tr>
+    <tr><td>Number Theory</td><td>Core</td><td>Intro to Number Theory</td></tr>
+    <tr><td>Geometry</td><td>Core</td><td>Introduction to Geometry</td></tr>
+    <tr><td>Intermediate Algebra</td><td>Stretch only (level 1&ndash;3)</td><td>Intermediate Algebra</td></tr>
+    <tr><td>Precalculus</td><td>Excluded</td><td>&ndash;</td></tr>
+  </table>
+  <h3>Pool split (prevents exposure leakage)</h3>
+  <table>
+    <tr><th>Pool</th><th>Source</th><th>Used for</th></tr>
+    <tr><td><b>Assessment pool</b></td><td>MATH <i>test</i> split (filtered)</td><td>Monthly simulated tests only; never shown in practice</td></tr>
+    <tr><td><b>Practice pool</b></td><td>MATH <i>train</i> split (filtered)</td><td>Lessons, worked examples, homework, check-ins</td></tr>
+  </table>
+  <p>Every problem shown to you is recorded in an <b>exposure log</b>, so a problem is never reused as an "unseen" test item.</p>
+  <h3>Offline import pipeline</h3>
+<pre>
+data\raw\        original download (never modified)
+   |  1. filter subjects (table above)
+   |  2. extract answer from \boxed{...}  -> quarantine if missing or ambiguous
+   |  3. normalize answer with SymPy (1/2 == \frac{1}{2} == 0.5)
+   |  4. detect [asy] diagrams -> render to SVG, or flag has_diagram (skip in v1)
+   |  5. map subject -> skill topic; optional model-assisted fine tagging (reviewed)
+   |  6. de-duplicate
+   v
+data\staging\    normalized JSON
+   |  7. validate (answer present, LaTeX renders, no duplicates)
+   v
+data\learn.db    problems table, pool = assessment | practice
+   |  8. manually spot-check about 50 random problems
+</pre>
+  <h3>Known limitations of v1 data</h3>
+  <ul>
+    <li><b>No multiple-choice options:</b> answers are typed as free responses. This is harder than AMC (no answer choices to use for elimination or checking).</li>
+    <li><b>Simulated difficulty:</b> MATH levels approximate AMC difficulty; they are not calibrated AMC tests.</li>
+    <li><b>Diagrams:</b> written as Asymptote code; v1 may skip diagram problems.</li>
+  </ul>
+</section>
+
+<section id="test">
+  <h2>7. Simulated AMC 10 Test (v1)</h2>
+  <ul>
+    <li><b>Format:</b> 25 problems, 75 minutes, drawn from the assessment pool.</li>
+    <li><b>Scoring</b> (AMC-style): +6 correct, +1.5 blank, 0 wrong; maximum 150.</li>
+    <li><b>Captured:</b> answer, skip, time per problem, optional confidence (1&ndash;3).</li>
+    <li><b>No help</b> during the test; review starts after submission.</li>
+  </ul>
+  <h3>Difficulty blueprint (problem position &rarr; MATH level)</h3>
+  <table>
+    <tr><th>Positions</th><th>AMC role</th><th>MATH level</th><th>Count</th></tr>
+    <tr><td>1&ndash;5</td><td>Warm-up</td><td>Level 1&ndash;2</td><td>5</td></tr>
+    <tr><td>6&ndash;12</td><td>Easy</td><td>Level 2&ndash;3</td><td>7</td></tr>
+    <tr><td>13&ndash;19</td><td>Medium</td><td>Level 3&ndash;4</td><td>7</td></tr>
+    <tr><td>20&ndash;25</td><td>Hard</td><td>Level 4&ndash;5</td><td>6</td></tr>
+  </table>
+  <h3>Topic blueprint (approximate AMC 10 mix)</h3>
+  <table>
+    <tr><th>Algebra (+Prealgebra)</th><th>Geometry</th><th>Counting &amp; Probability</th><th>Number Theory</th></tr>
+    <tr><td>8&ndash;9</td><td>6&ndash;7</td><td>5</td><td>4&ndash;5</td></tr>
+  </table>
+  <p>Each new test uses the same blueprint with fresh, unseen problems, so results stay comparable from month to month.</p>
+</section>
+
+<section id="db">
+  <h2>8. Data Model (SQLite)</h2>
+  <table>
+    <tr><th>Table</th><th>Key fields</th></tr>
+    <tr><td><code>problems</code></td><td>id, source, source_ref, subject, skill, level, problem_latex, solution_latex, answer, answer_norm, has_diagram, pool</td></tr>
+    <tr><td><code>skills</code></td><td>id, name, subject, parent_id, prerequisites, book_ref</td></tr>
+    <tr><td><code>assessments</code></td><td>id, blueprint, started_at, submitted_at, score</td></tr>
+    <tr><td><code>attempts</code></td><td>id, problem_id, context (test / homework / practice), answer, correct, time_sec, hints_used, confidence, reasoning_text</td></tr>
+    <tr><td><code>exposures</code></td><td>problem_id, first_seen_at, context</td></tr>
+    <tr><td><code>skill_estimates</code></td><td>skill_id, mastery (0&ndash;1), confidence, evidence_count, updated_at</td></tr>
+    <tr><td><code>diagnoses</code></td><td>attempt_id, cause (concept / strategy / execution / timing / uncertain), note</td></tr>
+    <tr><td><code>plans</code></td><td>id, version, month_start, goals_json, status</td></tr>
+    <tr><td><code>plan_items</code></td><td>plan_id, date, type (lesson / homework / review / check-in / test), skill_id, status</td></tr>
+    <tr><td><code>homework</code></td><td>id, plan_item_id, problem_ids, due, completed_at, score</td></tr>
+    <tr><td><code>error_log</code></td><td>attempt_id, problem_id, cause, next_review_at, review_count</td></tr>
+    <tr><td><code>sessions</code></td><td>sdk_session_id, activity_type, activity_id, created_at</td></tr>
+  </table>
+</section>
+
+<section id="rules">
+  <h2>9. Guardrails</h2>
+  <ul>
+    <li><b>Math correctness:</b> the agent checks computations with the math MCP server and prefers stored, verified solutions over new derivations.</li>
+    <li><b>Test integrity:</b> during a test, the tutor has no access to answer keys or solutions.</li>
+    <li><b>Tool permissions:</b> SDK built-in shell, file, and web tools are disabled; only learning tools are allowed (avoid <code>approveAll</code>).</li>
+    <li><b>Structured outputs:</b> plans and homework are JSON proposals that code validates before saving.</li>
+    <li><b>Honest mastery:</b> problems solved with hints count as "assisted", not mastered.</li>
+    <li><b>Content use:</b> public data and my own books are for personal, local study only; nothing is redistributed. No automated scraping of AoPS (its <code>robots.txt</code> forbids <code>ai-train</code>; its Terms of Service limit use to "information purposes").</li>
+  </ul>
+</section>
+
+<section id="poc">
+  <h2>10. POC Plan</h2>
+  <table>
+    <tr><th>#</th><th>Step</th><th>Deliverable</th><th>Est.</th></tr>
+    <tr><td>1</td><td>Project setup</td><td>Node/TS backend, React + KaTeX frontend, SQLite schema, Copilot SDK hello-world using my Copilot login</td><td>0.5&ndash;1 day</td></tr>
+    <tr><td>2</td><td>MATH import</td><td>Pipeline above &rarr; assessment and practice pools in <code>learn.db</code>; spot-check report</td><td>2&ndash;3 days</td></tr>
+    <tr><td>3</td><td>Math MCP server</td><td>Python + SymPy: answer normalization, equality checks, evaluation</td><td>1 day</td></tr>
+    <tr><td>4</td><td>Test player</td><td>25-question timed test from the blueprint; free-response answers; AMC-style scoring</td><td>2 days</td></tr>
+    <tr><td>5</td><td>SDK tutor + tools</td><td>Session per activity, native tools, content MCP, streaming chat in the UI</td><td>2 days</td></tr>
+    <tr><td>6</td><td>Diagnosis + plan</td><td>Review conversation &rarr; diagnoses &rarr; validated one-month plan</td><td>2 days</td></tr>
+    <tr><td>7</td><td>Lesson + homework</td><td>Concept explanation, worked examples, Q&amp;A, homework, feedback, error log</td><td>3 days</td></tr>
+    <tr><td>8</td><td>Reassessment loop</td><td>New test, month-over-month comparison, adjusted plan, weekly check-in</td><td>1&ndash;2 days</td></tr>
+  </table>
+  <div class="callout"><b>POC milestone (about 2 weeks):</b> steps 1&ndash;6 &ndash; take a simulated test &rarr; get a score and diagnosis &rarr; receive a saved one-month plan.</div>
+  <h3>Suggested repository layout</h3>
+<pre>
+C:\LearnAgent\
+  apps\web\            React + KaTeX UI
+  apps\server\         Node/TS backend, Copilot SDK, learning services
+  mcp\content\         content MCP server (Node)
+  mcp\math\            math MCP server (Python + SymPy)
+  ingest\              offline import scripts (MATH dataset first)
+  data\raw\            downloaded datasets (git-ignored)
+  data\staging\        normalized JSON
+  data\learn.db        SQLite database
+  design.html          this document
+</pre>
+</section>
+
+<section id="future">
+  <h2>11. Future Phases</h2>
+  <ul>
+    <li><b>Official AMC 10 contests</b> (from my PDFs or pages saved manually) &rarr; become the assessment pool with real A&ndash;E answer choices and calibrated difficulty; MATH moves to practice only.</li>
+    <li><b>AoPS books</b> (my own copies) &rarr; topic &rarr; chapter/section mapping; lessons cite book sections.</li>
+    <li><b>Photo upload</b> of handwritten scratch work for reasoning feedback.</li>
+    <li><b>Diagram rendering</b> for Asymptote problems.</li>
+    <li><b>Search over books</b> only if the topic &rarr; section mapping proves insufficient.</li>
+    <li><b>Better skill estimates</b> (for example, Elo or item response theory) once there is enough attempt history.</li>
+  </ul>
+</section>
+
+</main>
+<footer>AMC 10 Learning Agent &middot; High-Level Design v1 &middot; November 2026</footer>
+</body>
+</html>

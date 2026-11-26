@@ -1,0 +1,24 @@
+{
+  "name": "amc10-learning-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal AMC 10 learning agent built on the GitHub Copilot SDK",
+  "main": "server/index.mjs",
+  "scripts": {
+    "ingest": "node ingest/import-math.mjs",
+    "start": "node server/index.mjs",
+    "reset": "node scripts/reset-progress.mjs",
+    "test": "node --test test/"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@github/copilot-sdk": "^1.0.34",
+    "express": "^5.3.0",
+    "hyparquet": "^1.33.0",
+    "katex": "^0.19.1",
+    "marked": "^18.1.3"
+  }
+}
